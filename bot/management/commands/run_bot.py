@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from telegram import BotCommand
 from telegram.ext import (ApplicationBuilder, CommandHandler, MessageHandler, filters, )
 
-from bot.handlers import start, show_favorites, handle_city
+from bot.handlers import start, show_favorites, handle_city, lang
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +24,14 @@ class Command(BaseCommand):
 
         app.add_handler(CommandHandler('start', start))
         app.add_handler(CommandHandler('favorites', show_favorites))
+        app.add_handler(CommandHandler('lang', lang))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_city))
 
         async def set_commands(application):
             await application.bot.set_my_commands([
                 BotCommand('start', 'Start bot'),
                 BotCommand('favorites', 'Show favorite cities'),
+                BotCommand('lang', 'Change your language')
             ])
             logger.info('Bot is working')
 

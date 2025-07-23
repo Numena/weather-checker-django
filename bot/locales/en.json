@@ -1,0 +1,9 @@
+{
+  "start": "Hello! Type the name of a city and send it.\nFor example: New York.\nTo use commands, tap the menu at the bottom.",
+  "lang_set": "Language set to {lang}",
+  "usage_lang": "Usage: /lang ru or /lang en",
+  "no_cities": "You don't have chosen cities yet",
+  "choose": "Choose the city:",
+  "error": "Error: {error}",
+  "weather": "{city}: {temp}°C, {desc}"
+}
