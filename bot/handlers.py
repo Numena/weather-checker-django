@@ -3,7 +3,8 @@ from asgiref.sync import sync_to_async
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 from django.conf import settings
-from .models import TelegramUser
+from .models import TelegramUser, City
+from .types import WeatherInfo
 from .utils import with_user_language
 from .i18n import tr
 
@@ -26,10 +27,12 @@ async def lang(update: Update, context: ContextTypes.DEFAULT_TYPE):
             telegram_id=update.effective_user.id
         )
         user.language = code
-        await sync_to_async(user.save)()
+        await sync_to_async(user.save, thread_sensitive=True)()
+
+        context.user_lang = code
 
         await update.message.reply_text(
-            tr('lang_set', code, lang=choices[code])
+            tr('lang_set', context.user_lang, lang=choices[code])
         )
     else:
         await update.message.reply_text(
@@ -40,11 +43,11 @@ async def lang(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
-    cities = await sync_to_async(list)(
-        FavoriteCity.objects
-        .filter(telegram_id=user_id)
-        .values_list('city', flat=True)
+    user, _ = await sync_to_async(TelegramUser.objects.get_or_create)(
+        telegram_id=str(user_id)
     )
+
+    cities = await sync_to_async(lambda:list(user.favorites.values_list('name', flat=True)))()
 
     if not cities:
         await update.message.reply_text(tr('no_cities', context.user_lang))
@@ -56,23 +59,32 @@ async def show_favorites(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @with_user_language
 async def handle_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    city = update.message.text.strip()
-    user_id = update.effective_user.id
+    city_name = update.message.text.strip()
+    user_id = str(update.effective_user.id)
 
-    await sync_to_async(FavoriteCity.objects.get_or_create, thread_sensitive=True)(
-        telegram_id=user_id, city=city
-    )
+    user, _ = await sync_to_async(TelegramUser.objects.get_or_create, thread_sensitive=True)(telegram_id=user_id)
 
-    weather_data =  await get_weather(city)
+    if context.user_lang != user.language: context.user_lang = user.language
 
-    if 'error' in weather_data:
+    city_obj, _ = await sync_to_async(City.objects.get_or_create, thread_sensitive=True)(name=city_name)
+
+    await sync_to_async(user.favorites.add, thread_sensitive=True)(city_obj)
+
+    result = await get_weather(city_name, context.user_lang)
+
+    if result is None:
         await update.message.reply_text(
-            tr('error', context.user_lang, weather_data['error'])
+            tr('error', context.user_lang, error='WeatherFetchFailed')
         )
         return
 
-    await update.message.reply_text(tr('weather',context.user_lang,
-    city=city.title(),
-    temp = weather_data['temperature'],
-    desc = weather_data['description']
-))
+    assert isinstance(result, WeatherInfo)
+    await update.message.reply_text(
+        tr(
+            'weather',
+            context.user_lang,
+            city=result.city.title(),
+            temp = result.temperature,
+            desc = result.description
+        )
+    )
